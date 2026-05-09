@@ -1,0 +1,15 @@
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+
+# Original format files (converted to cleaner formats)
+Prompt.txt.rtf
+E Commerce Customer Support  Agent Demo.docx.pdf
+
+# Duplicate of data/ copy
+/Ecommerce negative review agent.xlsx
