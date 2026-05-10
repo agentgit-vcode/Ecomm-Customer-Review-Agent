@@ -97,6 +97,11 @@ For ALERT reviews, the agent drafts a personalized email that:
 └── README.md
 ```
 
+## Documentation
+
+- **[Product Requirements Document (PRD)](docs/PRD.md)** — problem statement, user stories, functional requirements, success metrics
+- **[Technical Specification](docs/TECH_SPEC.md)** — architecture, data model, AI agent design, UI wireframes, ADRs
+
 ## Background
 
 This project started as a Zapier-based automation (see `prompt.txt` for the original agent prompt) and was rebuilt into a full-stack web application with a real database and direct Claude API integration.
