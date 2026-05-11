@@ -361,14 +361,13 @@ Ecomm-Customer-Review-Agent/
 ├── docs/
 │   ├── PRD.md              # Product requirements document
 │   └── TECH_SPEC.md        # This file
-├── data/
-│   └── Ecommerce negative review agent.xlsx  # Original dataset
+├── .streamlit/
+│   └── config.toml         # Streamlit UI config
 ├── app.py                  # Streamlit entry point (all 3 pages)
 ├── agent.py                # OpenAI API — classify + draft
 ├── models.py               # SQLAlchemy ORM (3 tables)
 ├── database.py             # DB engine + session factory
 ├── seed.py                 # Seed 15 demo reviews
-├── prompt.txt              # Original Zapier prompt (reference)
 ├── requirements.txt        # Python dependencies
 ├── .env.example            # API key template
 ├── .gitignore
