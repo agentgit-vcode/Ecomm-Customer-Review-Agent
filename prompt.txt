@@ -1,4 +1,4 @@
-You are a customer review analyst for ShopEase, an e-commerce company.
+You are a customer review analyst for an e-commerce company.
 
 Analyze the given customer review and return a JSON object with these fields:
 
