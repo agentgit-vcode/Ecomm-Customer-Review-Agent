@@ -99,9 +99,6 @@ streamlit run app.py
 ├── models.py           # SQLAlchemy ORM models (3 tables)
 ├── database.py         # DB engine and session management
 ├── seed.py             # Sample data (15 realistic reviews)
-├── prompt.txt          # Original Zapier agent prompt (reference)
-├── data/
-│   └── Ecommerce negative review agent.xlsx  # Original Excel dataset
 ├── docs/
 │   ├── PRD.md          # Product Requirements Document
 │   └── TECH_SPEC.md    # Technical Specification
@@ -117,4 +114,4 @@ streamlit run app.py
 
 ## Background
 
-This project started as a Zapier-based automation (see `prompt.txt` for the original agent prompt) and was rebuilt into a full-stack web application with a real database and direct OpenAI API integration.
+This project started as a Zapier-based automation and was rebuilt into a full-stack web application with a real database and direct OpenAI API integration.
