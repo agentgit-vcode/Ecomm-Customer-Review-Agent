@@ -94,22 +94,38 @@ The agent handles the analysis and writing. The human makes the final call.
 
 - Agent processes all unprocessed reviews when triggered by the user
 - For each review, the agent returns:
-  - **Sentiment**: POSITIVE, NEGATIVE, or NEUTRAL
-  - **Severity**: HIGH or LOW (for negative reviews only)
-  - **Action**: ALERT (needs email) or LOG (no action needed)
-  - **Category**: shipping, quality, defective, service, pricing, or other
+  - **Sentiment**: POSITIVE, NEGATIVE, NEUTRAL, MIXED, or SPAM
+  - **Severity**: HIGH or LOW (for negative/mixed reviews only)
+  - **Action**: ALERT (needs apology email), THANK (positive — thank-you email), LOG (neutral — no action), or FLAG (spam — flag for manual review)
+  - **Category**: shipping, delivery_delay, wrong_item, quality, defective, safety, service, pricing, or other
   - **Reason**: one-sentence explanation of the decision
   - **Confidence**: 0.0 to 1.0 score
-- For ALERT reviews, the agent also drafts a personalized email
+- For ALERT reviews, the agent drafts a personalized apology email requesting details
+- For THANK reviews, the agent drafts a short thank-you email
 - Agent tracks each processing run (start time, end time, count of reviews processed, alerts generated)
 
 ### FR-3: Email Drafting
 
-- Draft emails must address the customer by first name
-- Draft emails must reference the specific product and issue
-- Draft emails must offer a concrete resolution (refund, replacement, or discount)
-- Draft emails must be under 150 words
-- Tone: sincere, professional, not overly formal
+**For negative/mixed reviews (ALERT):**
+- Address the customer by first name
+- Reference the specific product and acknowledge their issue
+- Do NOT promise refunds, replacements, or discounts upfront
+- Politely ask for additional details (order number, photos, description of issue)
+- Assure the customer the team will review their case promptly
+- Do NOT admit fault or accept liability on behalf of ShopEase
+- Keep under 150 words
+- Tone: sincere, empathetic, professional
+
+**For positive reviews (THANK):**
+- Address the customer by first name, thank them for the review
+- Keep it short (2-3 sentences, under 75 words)
+- Optionally invite them to share on social media
+
+**All emails:**
+- Sign off with branded team name ("The ShopEase Support Team" or "The ShopEase Team")
+- Never include the customer's email address in the email body
+- Never reference internal processes or policies not visible to the customer
+- Never invent product details not mentioned in the review
 
 ### FR-4: Email Queue Workflow
 
@@ -126,10 +142,16 @@ The agent handles the analysis and writing. The human makes the final call.
 - Provide a "Process New Reviews" button with real-time progress feedback
 - Show recent agent run history
 
-### FR-6: Reviews List
+### FR-6: Test a Review
+
+- Sidebar text area allows users to paste or type any review text
+- Submitting adds the review to the database as pending (with default customer/product values)
+- User can then process it from the Dashboard to see the agent's classification and email draft in real-time
+
+### FR-7: Reviews List
 
 - Display all reviews in a sortable, filterable list
-- Filter by: processing status (all, processed, pending), sentiment, product category
+- Filter by: processing status (all, processed, pending), sentiment (including MIXED, SPAM), product category
 - Expandable row showing full review text, agent analysis, and draft email (if applicable)
 
 ---
@@ -148,13 +170,15 @@ The agent handles the analysis and writing. The human makes the final call.
 
 ## 7. Agent Decision Matrix
 
-| Star Rating | Review Content | Sentiment | Action | Severity |
-|-------------|---------------|-----------|--------|----------|
-| 4-5 | Praise, satisfaction | POSITIVE | LOG | — |
-| 3 | Lukewarm, mixed feelings | NEUTRAL | LOG | — |
-| 1-2 | Defective, safety, refund request | NEGATIVE | ALERT | HIGH |
-| 1-2 | Slow shipping, minor cosmetic issue | NEGATIVE | ALERT | LOW |
-| 1-2 | Order total > $100 | NEGATIVE | ALERT | HIGH |
+| Star Rating | Review Content | Sentiment | Action | Severity | Email |
+|-------------|---------------|-----------|--------|----------|-------|
+| 4-5 | Praise, satisfaction | POSITIVE | THANK | — | Thank-you note |
+| 3 | Lukewarm, mixed feelings | NEUTRAL | LOG | — | None |
+| 3-4 | Praise + significant complaint | MIXED | ALERT | LOW | Apology + ask for details |
+| 1-2 | Defective, safety, refund request | NEGATIVE | ALERT | HIGH | Apology + ask for details |
+| 1-2 | Slow shipping, minor cosmetic issue | NEGATIVE | ALERT | LOW | Apology + ask for details |
+| 1-2 | Order total > $100 | NEGATIVE | ALERT | HIGH | Apology + ask for details |
+| Any | Irrelevant, nonsensical, spam | SPAM | FLAG | — | None (flagged for manual review) |
 
 ---
 

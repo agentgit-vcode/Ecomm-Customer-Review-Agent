@@ -1,33 +1,34 @@
 # ReviewIQ — E-Commerce Customer Review Agent
 
-A web-based AI agent that monitors e-commerce customer reviews, classifies sentiment, and automatically drafts personalized apology emails for negative reviews — ready for customer support reps to review and send.
+A web-based AI agent for ShopEase that monitors customer reviews, classifies sentiment, drafts apology emails for negative reviews (requesting details before committing to resolutions), and sends thank-you notes for positive reviews — all ready for customer support reps to review and send.
 
 ## How It Works
 
 ```
-Customer Review (from DB)
+Customer Review (from DB or manual input)
         │
         ▼
   ┌─────────────────┐
-  │  Claude Sonnet   │  Classifies sentiment + drafts email in one call
-  │  (AI Agent)      │
+  │     GPT-4o       │  Classifies sentiment + drafts email in one call
+  │   (AI Agent)     │
   └────────┬────────┘
            │
-     ┌─────┴─────┐
-     │           │
-  POSITIVE/    NEGATIVE
-  NEUTRAL      (ALERT)
-     │           │
-    LOG       Draft Email
-    done      for Rep to
-              Review & Send
+   ┌───────┼───────┬──────────┐
+   │       │       │          │
+POSITIVE NEUTRAL NEGATIVE   SPAM
+ (THANK)  (LOG)  (ALERT)   (FLAG)
+   │       │       │          │
+Thank-you  No    Apology +  Flag for
+ email   action  ask for    manual
+                 details    review
 ```
 
 ## Features
 
 - **Dashboard** — stats, pending reviews, recent alerts, one-click agent processing
-- **Reviews** — filterable list with expandable detail view showing agent analysis
-- **Email Queue** — review, edit, approve/reject, and send AI-drafted emails
+- **Reviews** — filterable list (5 sentiments, 9 categories) with expandable detail view
+- **Email Queue** — review, edit, approve/reject AI-drafted emails (apologies + thank-yous)
+- **Test a Review** — paste any review text in the sidebar to test the agent instantly
 
 ## Tech Stack
 
@@ -35,7 +36,7 @@ Customer Review (from DB)
 |-------|-----------|
 | UI | Streamlit |
 | Database | SQLite + SQLAlchemy ORM |
-| AI Agent | Claude API (Anthropic SDK) |
+| AI Agent | OpenAI GPT-4o (OpenAI SDK) |
 | Language | 100% Python |
 
 ## Quick Start
@@ -50,7 +51,7 @@ pip install -r requirements.txt
 
 # Set your API key
 cp .env.example .env
-# Edit .env and add your Anthropic API key
+# Edit .env and add your OpenAI API key
 
 # Seed the database with sample reviews
 python seed.py
@@ -64,34 +65,46 @@ streamlit run app.py
 3 tables — kept simple and flat:
 
 - **`reviews`** — customer name, email, product, rating, review text, processed flag
-- **`analyses`** — sentiment, severity, action, reasoning, draft email + status
+- **`analyses`** — sentiment, severity, action, category, reasoning, draft email + status
 - **`agent_runs`** — audit log of processing runs
 
 ## Agent Decision Logic
 
-| Condition | Sentiment | Action | Severity |
-|-----------|-----------|--------|----------|
-| 4-5 stars, positive text | POSITIVE | LOG | — |
-| 3 stars, neutral text | NEUTRAL | LOG | — |
-| 1-2 stars, defective/safety/refund | NEGATIVE | ALERT | HIGH |
-| 1-2 stars, minor complaint | NEGATIVE | ALERT | LOW |
+| Condition | Sentiment | Action | Severity | Email |
+|-----------|-----------|--------|----------|-------|
+| 4-5 stars, praise | POSITIVE | THANK | — | Thank-you note |
+| 3 stars, lukewarm | NEUTRAL | LOG | — | None |
+| Mixed praise + complaint | MIXED | ALERT | LOW | Apology + ask for details |
+| 1-2 stars, defective/safety/refund | NEGATIVE | ALERT | HIGH | Apology + ask for details |
+| 1-2 stars, minor complaint | NEGATIVE | ALERT | LOW | Apology + ask for details |
+| Irrelevant or nonsensical | SPAM | FLAG | — | None (flagged) |
 
-For ALERT reviews, the agent drafts a personalized email that:
+**For ALERT emails, the agent:**
 - Addresses the customer by first name
-- References the specific product and issue
-- Offers a resolution (refund, replacement, or discount)
+- Acknowledges the specific product and issue
+- Does NOT promise refunds or replacements upfront
+- Asks for additional details (order number, photos, description)
+- Assures prompt follow-up once details are received
+
+**Guardrails:**
+- Never admits fault or liability on behalf of ShopEase
+- Never invents product details not in the review
+- Never includes the customer's email in the email body
 
 ## Project Structure
 
 ```
 ├── app.py              # Streamlit app (Dashboard, Reviews, Email Queue)
-├── agent.py            # Claude API integration (classify + draft)
+├── agent.py            # OpenAI API integration (classify + draft)
 ├── models.py           # SQLAlchemy ORM models (3 tables)
 ├── database.py         # DB engine and session management
 ├── seed.py             # Sample data (15 realistic reviews)
 ├── prompt.txt          # Original Zapier agent prompt (reference)
 ├── data/
 │   └── Ecommerce negative review agent.xlsx  # Original Excel dataset
+├── docs/
+│   ├── PRD.md          # Product Requirements Document
+│   └── TECH_SPEC.md    # Technical Specification
 ├── requirements.txt
 ├── .env.example
 └── README.md
@@ -99,9 +112,9 @@ For ALERT reviews, the agent drafts a personalized email that:
 
 ## Documentation
 
-- **[Product Requirements Document (PRD)](docs/PRD.md)** — problem statement, user stories, functional requirements, success metrics
-- **[Technical Specification](docs/TECH_SPEC.md)** — architecture, data model, AI agent design, UI wireframes, ADRs
+- **[Product Requirements Document (PRD)](docs/PRD.md)** — problem statement, user stories, functional requirements, decision matrix, success metrics
+- **[Technical Specification](docs/TECH_SPEC.md)** — architecture, data model, AI agent prompt design, UI wireframes, ADRs
 
 ## Background
 
-This project started as a Zapier-based automation (see `prompt.txt` for the original agent prompt) and was rebuilt into a full-stack web application with a real database and direct Claude API integration.
+This project started as a Zapier-based automation (see `prompt.txt` for the original agent prompt) and was rebuilt into a full-stack web application with a real database and direct OpenAI API integration.

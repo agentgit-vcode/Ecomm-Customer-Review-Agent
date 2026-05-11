@@ -1,6 +1,8 @@
 """ReviewIQ — E-Commerce Customer Review Agent Dashboard."""
 
 import os
+from datetime import datetime, timezone
+
 import streamlit as st
 import pandas as pd
 from sqlalchemy import func
@@ -30,6 +32,30 @@ page = st.sidebar.radio(
     ["Dashboard", "Reviews", "Email Queue"],
     label_visibility="collapsed",
 )
+
+# --- Test a Review ---
+st.sidebar.divider()
+st.sidebar.subheader("Test a Review")
+test_review = st.sidebar.text_area("Paste or write a review", height=120, placeholder="e.g. The product broke after 2 days. Very disappointed...")
+
+if st.sidebar.button("Submit Review", type="primary", use_container_width=True, disabled=not test_review):
+    session = get_session()
+    review = Review(
+        customer_name="Test Customer",
+        customer_email="test@example.com",
+        product_name="Sample Product",
+        product_category="General",
+        order_total=49.99,
+        star_rating=3,
+        review_text=test_review,
+        submitted_at=datetime.now(timezone.utc),
+        processed=False,
+    )
+    session.add(review)
+    session.commit()
+    session.close()
+    st.sidebar.success("Review added! Go to Dashboard to process it.")
+    st.rerun()
 
 
 # ============================================================
@@ -73,15 +99,15 @@ def render_dashboard():
                         current / total,
                         text=f"Processing {current}/{total}...",
                     )
-                    emoji = {"POSITIVE": "✅", "NEGATIVE": "🚨", "NEUTRAL": "➖"}.get(sentiment, "")
+                    emoji = {"POSITIVE": "✅", "NEGATIVE": "🚨", "NEUTRAL": "➖", "MIXED": "⚠️", "SPAM": "🚫"}.get(sentiment, "")
                     status_text.text(f"{emoji} {customer_name} — {sentiment}")
 
                 try:
-                    run = process_reviews(progress_callback=on_progress)
+                    result = process_reviews(progress_callback=on_progress)
                     progress_bar.progress(1.0, text="Complete!")
                     st.success(
-                        f"Processed {run.reviews_processed} reviews. "
-                        f"{run.alerts_generated} alerts generated."
+                        f"Processed {result['reviews_processed']} reviews. "
+                        f"{result['alerts_generated']} alerts generated."
                     )
                     st.rerun()
                 except Exception as e:
@@ -144,7 +170,7 @@ def render_reviews():
     with col1:
         filter_status = st.selectbox("Status", ["All", "Processed", "Pending"])
     with col2:
-        filter_sentiment = st.selectbox("Sentiment", ["All", "POSITIVE", "NEGATIVE", "NEUTRAL"])
+        filter_sentiment = st.selectbox("Sentiment", ["All", "POSITIVE", "NEGATIVE", "NEUTRAL", "MIXED", "SPAM"])
     with col3:
         filter_category = st.selectbox(
             "Product Category",
@@ -196,7 +222,7 @@ def render_reviews():
                 st.markdown(f"**Rating:** {review.star_rating}/5")
             with col3:
                 if analysis:
-                    sentiment_emoji = {"POSITIVE": "🟢", "NEGATIVE": "🔴", "NEUTRAL": "🟡"}.get(
+                    sentiment_emoji = {"POSITIVE": "🟢", "NEGATIVE": "🔴", "NEUTRAL": "🟡", "MIXED": "🟠", "SPAM": "⛔"}.get(
                         analysis.sentiment, ""
                     )
                     st.markdown(f"**Sentiment:** {sentiment_emoji} {analysis.sentiment}")
@@ -245,7 +271,7 @@ def render_email_queue():
     query = (
         session.query(Analysis, Review)
         .join(Review)
-        .filter(Analysis.action == "ALERT")
+        .filter(Analysis.action.in_(["ALERT", "THANK"]))
         .filter(Analysis.draft_email_body.isnot(None))
         .order_by(Analysis.analyzed_at.desc())
     )
@@ -276,8 +302,11 @@ def render_email_queue():
                     f"({review.star_rating}★, ${review.order_total:.2f})"
                 )
             with col2:
-                severity_color = "red" if analysis.severity == "HIGH" else "orange"
-                st.markdown(f"Severity: :{severity_color}[**{analysis.severity}**]")
+                if analysis.action == "THANK":
+                    st.markdown(f"Type: :green[**THANK YOU**]")
+                elif analysis.severity:
+                    severity_color = "red" if analysis.severity == "HIGH" else "orange"
+                    st.markdown(f"Severity: :{severity_color}[**{analysis.severity}**]")
             with col3:
                 st.markdown(f"Status: {status_emoji} **{analysis.email_status}**")
 

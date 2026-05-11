@@ -30,8 +30,8 @@
 │          └───────┬────────┘                           │
 │                  │                                    │
 │          ┌───────▼────────┐    ┌─────────────────┐   │
-│          │   SQLite DB    │    │  Claude API      │   │
-│          │ (reviewiq.db)  │    │  (Anthropic SDK) │   │
+│          │   SQLite DB    │    │  OpenAI API      │   │
+│          │ (reviewiq.db)  │    │  (OpenAI SDK)    │   │
 │          └────────────────┘    └─────────────────┘   │
 │                                                      │
 └──────────────────────────────────────────────────────┘
@@ -48,8 +48,8 @@
 | UI Framework | Streamlit | >= 1.38 | Rapid prototyping, built-in components for data apps |
 | Database | SQLite | Built-in | Zero setup, file-based, sufficient for demo scale |
 | ORM | SQLAlchemy | >= 2.0 | Type-safe queries, relationship management, DB-agnostic |
-| AI Model | Claude Sonnet | claude-sonnet-4-20250514 | Best balance of quality and cost for classification + generation |
-| AI SDK | Anthropic Python SDK | >= 0.40 | Official SDK, direct API access without framework overhead |
+| AI Model | GPT-4o | gpt-4o | Best balance of quality and cost for classification + generation |
+| AI SDK | OpenAI Python SDK | >= 1.0 | Official SDK, direct API access without framework overhead |
 | Language | Python | >= 3.10 | Single language for entire stack |
 
 ### Why No LLM Framework (LangChain, LangGraph)?
@@ -116,17 +116,17 @@ The agent flow is a simple linear pipeline: classify → optionally draft email.
 |--------|------|-------------|-------------|
 | id | INTEGER | PK, auto-increment | Unique analysis identifier |
 | review_id | INTEGER | FK → reviews.id, UNIQUE | One analysis per review |
-| sentiment | VARCHAR(20) | NOT NULL | POSITIVE, NEGATIVE, or NEUTRAL |
+| sentiment | VARCHAR(20) | NOT NULL | POSITIVE, NEGATIVE, NEUTRAL, MIXED, or SPAM |
 | severity | VARCHAR(10) | NULLABLE | HIGH or LOW (null for non-negative) |
-| action | VARCHAR(10) | NOT NULL | ALERT or LOG |
-| category | VARCHAR(50) | NULLABLE | Issue category (shipping, quality, defective, service, pricing, other) |
+| action | VARCHAR(10) | NOT NULL | ALERT, THANK, LOG, or FLAG |
+| category | VARCHAR(50) | NULLABLE | Issue category (shipping, delivery_delay, wrong_item, quality, defective, safety, service, pricing, other) |
 | reason | TEXT | NOT NULL | Agent's one-sentence reasoning |
 | confidence | FLOAT | NULLABLE | 0.0 to 1.0 confidence score |
-| draft_email_subject | VARCHAR(255) | NULLABLE | Email subject (ALERT reviews only) |
-| draft_email_body | TEXT | NULLABLE | Email body (ALERT reviews only) |
+| draft_email_subject | VARCHAR(255) | NULLABLE | Email subject (ALERT and THANK reviews) |
+| draft_email_body | TEXT | NULLABLE | Email body (ALERT and THANK reviews) |
 | email_status | VARCHAR(20) | NULLABLE | draft, approved, sent, rejected |
 | analyzed_at | DATETIME | DEFAULT now | When the analysis was created |
-| model_used | VARCHAR(50) | NULLABLE | Claude model identifier used |
+| model_used | VARCHAR(50) | NULLABLE | Model identifier used (e.g. gpt-4o) |
 
 #### `agent_runs`
 
@@ -157,7 +157,7 @@ A normalized schema would have separate `customers`, `products`, and `orders` ta
 
 ```
 ┌─────────────────────────────────────────────────┐
-│              Claude Sonnet API Call               │
+│              GPT-4o API Call                       │
 │                                                   │
 │  Input:                    Output (JSON):          │
 │  ├── customer_name         ├── sentiment           │
@@ -171,21 +171,25 @@ A normalized schema would have separate `customers`, `products`, and `orders` ta
 └─────────────────────────────────────────────────┘
 ```
 
-One API call handles both classification and email drafting. The model returns `null` for email fields when the review is positive/neutral.
+One API call handles classification, routing, and email drafting. The model returns `null` for email fields when no email is needed (LOG/FLAG actions).
 
 ### 4.2 Prompt Design
 
 The system prompt instructs the model to:
 
-1. Classify sentiment based on review text and star rating
-2. Assess severity using decision rules (defective → HIGH, order > $100 → HIGH)
-3. Draft email only for ALERT reviews
-4. Return structured JSON (no markdown, no explanation)
+1. Classify sentiment into 5 categories (POSITIVE, NEGATIVE, NEUTRAL, MIXED, SPAM)
+2. Route to the correct action (ALERT, THANK, LOG, FLAG)
+3. Assess severity using decision rules (defective → HIGH, order > $100 → HIGH)
+4. Draft appropriate email: apology + request for details (ALERT) or thank-you (THANK)
+5. Return structured JSON via `response_format: json_object`
 
 **Key prompt principles:**
 - Explicit output schema with field descriptions
 - Clear decision rules (not vague guidelines)
-- Constraints on email tone, length, and required elements
+- Separate email templates for ALERT vs THANK actions
+- Guardrails: no admitting liability, no inventing details, no leaking customer email in body
+- Conservative classification: prefer MIXED over POSITIVE when complaints exist
+- Brand identity: all emails signed by "The ShopEase Team"
 - "Return ONLY valid JSON" to prevent wrapper text
 
 ### 4.3 Processing Flow
@@ -198,7 +202,7 @@ process_reviews()
     ├── Query: SELECT * FROM reviews WHERE processed = FALSE
     │
     ├── For each review:
-    │   ├── Call Claude API (classify_and_draft)
+    │   ├── Call OpenAI API (classify_and_draft)
     │   ├── Parse JSON response
     │   ├── INSERT INTO analyses
     │   ├── UPDATE review SET processed = TRUE
@@ -216,7 +220,7 @@ process_reviews()
 
 | Failure | Handling |
 |---------|----------|
-| Claude API error (rate limit, timeout) | AgentRun marked `failed` with error message, partial progress preserved |
+| OpenAI API error (rate limit, timeout) | AgentRun marked `failed` with error message, partial progress preserved |
 | Invalid JSON response | Caught by `json.loads`, AgentRun marked `failed` |
 | Database error | Exception propagates, AgentRun marked `failed` |
 
@@ -236,6 +240,9 @@ process_reviews()
 │  ○ Reviews         │                      │  │
 │  ○ Email Queue     │                      │  │
 │                    │                      │  │
+│  ── Test a Review  │                      │  │
+│  [textarea]        │                      │  │
+│  [Submit Review]   │                      │  │
 │                    └──────────────────────┘  │
 └─────────────────────────────────────────────┘
 ```
@@ -357,7 +364,7 @@ Ecomm-Customer-Review-Agent/
 ├── data/
 │   └── Ecommerce negative review agent.xlsx  # Original dataset
 ├── app.py                  # Streamlit entry point (all 3 pages)
-├── agent.py                # Claude API — classify + draft
+├── agent.py                # OpenAI API — classify + draft
 ├── models.py               # SQLAlchemy ORM (3 tables)
 ├── database.py             # DB engine + session factory
 ├── seed.py                 # Seed 15 demo reviews
@@ -374,7 +381,7 @@ Ecomm-Customer-Review-Agent/
 
 ### ADR-1: No LLM Framework
 
-**Decision:** Use Anthropic SDK directly instead of LangChain/LangGraph.
+**Decision:** Use OpenAI SDK directly instead of LangChain/LangGraph.
 
 **Context:** The agent makes 1 API call per review with no tool use, no memory, no retrieval, and no multi-step reasoning.
 
@@ -388,12 +395,13 @@ Ecomm-Customer-Review-Agent/
 
 **Decision:** Classify and draft email in one API call, not separate classify → draft calls.
 
-**Context:** An earlier design used Haiku for classification and Sonnet for drafting. At demo scale (15 reviews), the cost savings of two-model routing is negligible (< $0.01).
+**Context:** An earlier design used a cheaper model for classification and a better model for drafting. At demo scale (15 reviews), the cost savings of two-model routing is negligible (< $0.01).
 
 **Consequences:**
 - (+) Simpler code — one function, one prompt, one response
 - (+) Faster — one round trip instead of two
-- (-) Slightly higher cost per positive review (Sonnet vs Haiku) — irrelevant at demo scale
+- (+) Single prompt handles all 4 action types (ALERT, THANK, LOG, FLAG) with appropriate email templates
+- (-) Slightly higher cost per positive review — irrelevant at demo scale
 
 ### ADR-3: SQLite Over PostgreSQL
 
@@ -454,6 +462,6 @@ Order totals range from $19.99 to $199.99.
 |---------|---------|---------|
 | streamlit | Web UI framework | Apache 2.0 |
 | sqlalchemy | ORM and database access | MIT |
-| anthropic | Claude API client | MIT |
+| openai | OpenAI API client | MIT |
 | python-dotenv | Load .env file for API key | BSD |
 | pandas | Data manipulation for Streamlit tables | BSD |
